@@ -19,7 +19,7 @@ namespace Aftr {
             virtual void init(float gravityScalar, Vector gravityNormalizedVector, std::string confFileName, const PHYSICS_ENGINE_TYPE& physicsEngineType);
             virtual void updateWorld(); ///< Called once per frame
             virtual void loadMap(); ///< Called once at startup to build this module's scene
-            virtual void createNewModuleWayPoints();
+            virtual void makeCheckpoints();
             virtual void onResizeWindow(GLsizei width, GLsizei height) { GLView::onResizeWindow(width, height); };
             virtual void onMouseDown(const SDL_MouseButtonEvent& e);
             virtual void onMouseUp(const SDL_MouseButtonEvent& e);
@@ -32,10 +32,10 @@ namespace Aftr {
 
             void processKeyPress(const SDL_Keycode& key);
 
-            void updateOrAdd(WO* wo);
             void removeWO(WO* wo);
-            void toggleWarthog();
-            void toggleBanner(bool toggle);
+            void toggleCar();
+            void toggleLaps(bool toggle);
+            void checkpointReached(int checkpoint);
 
             int getIndex(WO* wo);
             int getIndexFromLabel(std::string label);
@@ -43,11 +43,8 @@ namespace Aftr {
             Camera* getCam() { return camera->getCamera(); };
 
             Racetrack* racetrack;
-            WOWarthog* warthog;
-            WO* track_sphere;
-
-            ProgressBar* progressBar;
-            GUI* banner;
+            WOCar* car;
+            GUI* laps;
             PauseMenu* pauseMenu;
 
         protected:
@@ -55,11 +52,17 @@ namespace Aftr {
             virtual void onCreate();
             bool isDriving();
             bool isMovementKey(SDL_Keycode key);
+
+            int lapNumber;
+            int currentCheckpoint;
+
+            Checkpoint* finishLine;
+            Checkpoint* checkpoint1;
+            Checkpoint* checkpoint2;
+            Checkpoint* checkpoint3;
             
             Cam* camera;
             NetMessengerClient* client;
-            irrklang::ISound* citySound;
-            physx::PxRigidStatic* groundPlane;
             std::set<SDL_Keycode> keysPressed;
     };
 }

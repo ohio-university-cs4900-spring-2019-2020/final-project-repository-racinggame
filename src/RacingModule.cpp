@@ -21,16 +21,18 @@ RacingModule* RacingModule::New(const std::vector<std::string>& args) {
 }
 
 RacingModule::RacingModule(const std::vector<std::string>& args) : GLView(args) {
-    this->progressBar = nullptr;
-    this->warthog = nullptr;
-    this->banner = nullptr;
+    this->car = nullptr;
     this->racetrack = nullptr;
-    this->track_sphere = nullptr;
-    this->citySound = nullptr;
     this->client = nullptr;
-    this->groundPlane = nullptr;
     this->pauseMenu = nullptr;
     this->camera = nullptr;
+    this->laps = nullptr;
+    this->lapNumber = 1;
+    this->finishLine = nullptr;
+    this->checkpoint1 = nullptr;
+    this->checkpoint2 = nullptr;
+    this->checkpoint3 = nullptr;
+    this->currentCheckpoint = 0;
 }
 
 void RacingModule::init(float gravityScalar, Vector gravityNormalizedVector, std::string configFileName, const PHYSICS_ENGINE_TYPE& physicsEngineType) {
@@ -47,41 +49,40 @@ void RacingModule::onCreate(){
         this->pe->setGravityNormalizedVector(Vector(0.f, 0.f, -1.f));
         this->pe->setGravityScalar(GRAVITY); 
     }
-    this->setActorChaseType(STANDARDEZNAV); //Default is STANDARDEZNAV mode
+    this->setActorChaseType(CHASEACTORLOOK4); //Default is STANDARDEZNAV mode
     // setup Cam
     this->camera = Cam::New(this->cam);
-    this->worldLst->push_back(this->camera->getLocation());
-
-    // create world grid after physics is setup
-    //this->grid = WorldGrid::New(this->centerOfWorld, this->gravityDirection);
-    //this->worldLst->push_back(this->grid);
+    //this->worldLst->push_back(this->camera->getLocation());
 
     this->racetrack = Racetrack::New();
     this->worldLst->push_back(this->racetrack);
-    // setup background city noises
-    //this->citySound = ISoundManager::engine->play2D("../mm/sounds/citysounds.ogg", true);  
-
-    // make progressbar
-    this->progressBar = ProgressBar::New();
-    this->worldLst->push_back(this->progressBar->bar);
-    this->worldLst->push_back(this->progressBar->progress);
 
     // make pause menu
     this->pauseMenu = PauseMenu::New();
     this->worldLst->push_back(this->pauseMenu->exit);
     this->worldLst->push_back(this->pauseMenu->resume);
-    //this->worldLst->push_back(this->pauseMenu->restart);
 
-    // make banner
-    //this->banner = GUI::New(nullptr, 0.3f, 0.1f, "../mm/images/banner.png");
-    //this->banner->setPosition(Vector(0.5f, 0.9f, 0.f));
-    //this->banner->setTextFont(sharedMM + "/fonts/arial.ttf");
-    //this->banner->setText("Press 't' to summon a toilet!");
-    //this->banner->setLabel("Banner");
-    //this->banner->isFocusable(false);
-    //this->banner->receivesEvents(false);
-    //this->worldLst->push_back(this->banner);
-    
+    // make laps banner
+    this->laps = GUI::New(nullptr, 0.3f, 0.1f, "../mm/images/banner.png");
+    this->laps->setPosition(Vector(0.5f, 0.9f, 0.f));
+    this->laps->setTextFont(sharedMM + "/fonts/arial.ttf");
+    this->laps->setText("Lap 1");
+    this->laps->setLabel("Laps");
+    this->laps->getGUILabel()->setFontSize(24.f);
+    this->laps->isFocusable(false);
+    this->laps->receivesEvents(false);
+    this->worldLst->push_back(this->laps);
+
+    // add car to world
+    this->car = WOCar::New();
+    this->worldLst->push_back(this->car);
+    this->car->setDriver(this->cam);
+    this->cam->setActorToWatch(this->car);
+
+    // setup checkpoints 
+    this->makeCheckpoints();
+    this->car->setToCheckpoint(0);
+
     // setup messenger client
     std::string port = ManagerEnvironmentConfiguration::getVariableValue("NetServerListenPort");
     this->client = port == "12683" ? NetMessengerClient::New("127.0.0.1", "12682") : NetMessengerClient::New("127.0.0.1", "12683");
@@ -93,17 +94,10 @@ void RacingModule::updateWorld(){
         ISoundManager::setListenerPosition(this->cam->getPosition(), this->cam->getLookDirection(), Vector(0.f, 0.f, 0.f), this->cam->getNormalDirection());
         // update warthog
         if (this->isDriving()) {
-            this->warthog->update();
+            this->car->update();
             if (this->client->isTCPSocketOpen()) {
-                NetMsgWO netMsg = NetMsgWO::makeNetMsgWO(this->warthog->getPosition(), this->warthog->getDisplayMatrix(), this->getIndex(this->warthog));
+                NetMsgWO netMsg = NetMsgWO::makeNetMsgWO(this->car->getPosition(), this->car->getDisplayMatrix(), this->getIndex(this->car));
                 this->client->sendNetMsgSynchronousTCP(netMsg);
-            }
-        }
-        // update progress bar
-        if (this->progressBar != nullptr) {
-            this->progressBar->update();
-            if (this->client->isTCPSocketOpen()) {
-                this->client->sendNetMsgSynchronousTCP(NetMsgProgressBar(this->progressBar->getProgressWidth()));
             }
         }
         this->camera->update();
@@ -112,66 +106,47 @@ void RacingModule::updateWorld(){
     }
 }
 
-void RacingModule::updateOrAdd(WO* wo) {
-    int index = this->getIndex(wo);
-    if (index != -1) {
-        this->worldLst->at(index)->setPosition(wo->getPosition());
-        this->worldLst->at(index)->getModel()->setDisplayMatrix(wo->getDisplayMatrix());
-        return;
-    }
-    index = this->getIndexFromLabel(wo->getLabel());
-    if (index != -1) {
-        this->worldLst->at(index)->setPosition(wo->getPosition());
-        this->worldLst->at(index)->getModel()->setDisplayMatrix(wo->getDisplayMatrix());
-        return;
-    }
-    this->worldLst->push_back(wo);
-}
-
 void RacingModule::removeWO(WO* wo) {
     this->worldLst->eraseViaWOptr(wo);
 }
 
-void RacingModule::toggleWarthog() {
-    if (this->warthog == nullptr) {
-        this->warthog = WOWarthog::New();
-        this->warthog->setPosition(this->cam->getPosition());
-        this->worldLst->push_back(this->warthog);
-        this->worldLst->push_back(this->warthog->getSpeedometer());
-        this->warthog->setDriver(this->cam);
+void RacingModule::toggleCar() {
+    if (this->car == nullptr) {
+        this->car = WOCar::New();
+        this->worldLst->push_back(this->car);
+        this->car->setDriver(this->cam);
+        this->finishLine->getActivators()->push_back(this->car);
+        this->checkpoint1->getActivators()->push_back(this->car);
+        this->checkpoint2->getActivators()->push_back(this->car);
+        this->checkpoint3->getActivators()->push_back(this->car);
     } else {
-        this->warthog->setDriver(nullptr);
-        this->removeWO(this->warthog);
-        this->removeWO(this->warthog->getSpeedometer());
-        this->warthog = nullptr;
+        this->car->setDriver(nullptr);
+        this->car->actor->release();
+        this->removeWO(this->car);
+        this->car = nullptr;
     }
 }
 
-void RacingModule::toggleBanner(bool toggle) {
-  /*  if (toggle) {
-        this->banner->setWidthGUI(0.3f);
-        if (this->numToilets <= 0) {
-            this->banner->setText("Press 't' to summon a toilet!");
-        } else {
-            this->banner->setText(std::to_string(this->numToilets) + (this->numToilets == 1 ? " toilet" : " toilets"));
-        }
+void RacingModule::toggleLaps(bool toggle) {
+    if (toggle) {
+        this->laps->setWidthGUI(0.3f);
+        this->laps->setText("Lap " + std::to_string(this->lapNumber));
     } else {
-        this->banner->setWidthGUI(0.0f);
-        this->banner->setText("");
-    }*/
+        this->laps->setWidthGUI(0.0f);
+        this->laps->setText("");
+    }
 }
-
 
 void RacingModule::onKeyDown(const SDL_KeyboardEvent& key){
     GLView::onKeyDown(key);
-    if (this->isDriving()) this->warthog->onKeyDown(key);
+    if (this->isDriving()) this->car->onKeyDown(key);
     else if (this->isMovementKey(key.keysym.sym)) this->camera->onKeyDown(key);
     this->processKeyPress(key.keysym.sym);
 }
 
 void RacingModule::onKeyUp(const SDL_KeyboardEvent& key) {
     GLView::onKeyUp(key);
-    if (this->isDriving()) this->warthog->onKeyUp(key);  
+    if (this->isDriving()) this->car->onKeyUp(key);
     if (this->isMovementKey(key.keysym.sym)) this->camera->onKeyUp(key);
 }
 
@@ -179,7 +154,6 @@ void RacingModule::onMouseDown(const SDL_MouseButtonEvent& e) {
     GLView::onMouseDown(e);
     if (this->pauseMenu->isPaused()) {
         if (this->pauseMenu->exit->pixelResidesInBoundingRect(e.x, e.y)) {
-            //this->pauseMenu->exitGame();
             exit(1);
         }
         if (this->pauseMenu->resume->pixelResidesInBoundingRect(e.x, e.y)) {
@@ -190,24 +164,21 @@ void RacingModule::onMouseDown(const SDL_MouseButtonEvent& e) {
                 this->client->sendNetMsgSynchronousTCP(netMsgPause);
             }
             if (this->isDriving()) {
-                this->warthog->pauseWarthog(false);
+                this->car->pause(false);
             }
         }
-        //if (this->pauseMenu->restart->pixelResidesInBoundingRect(e.x, e.y)) {
-            //this->resetEngine();
-        //}
     }
-    if (this->isDriving()) { this->warthog->onMouseDown(e); }
+    if (this->isDriving()) { this->car->onMouseDown(e); }
 }
 
 void RacingModule::onMouseUp(const SDL_MouseButtonEvent& e) {
     GLView::onMouseUp(e);
-    if (this->isDriving()) { this->warthog->onMouseUp(e); }
+    if (this->isDriving()) { this->car->onMouseUp(e); }
 }
 
 void RacingModule::onMouseMove(const SDL_MouseMotionEvent& e) {
     GLView::onMouseMove(e);
-    if (this->isDriving()) { this->warthog->onMouseMove(e); }
+    if (this->isDriving()) { this->car->onMouseMove(e); }
 }
 
 int RacingModule::handleWindowEvent(SDL_WindowEvent& e) {
@@ -229,7 +200,7 @@ int RacingModule::handleEvent(SDL_Event& sdlEvent) {
             this->client->sendNetMsgSynchronousTCP(netMsgPause);
         }
         if (this->isDriving()) {
-            this->warthog->pauseWarthog(true);
+            this->car->pause(true);
         }
         this->camera->clear();
         return 1;
@@ -277,33 +248,47 @@ void RacingModule::loadMap(){
     wo->setLabel("Sky Box");
     wo->renderOrderType = RENDER_ORDER_TYPE::roOPAQUE;
     worldLst->push_back(wo);
-    createNewModuleWayPoints();
 }
 
-void RacingModule::createNewModuleWayPoints() {
-    // Create a waypoint with a radius of 3, a frequency of 5 seconds, activated by GLView's camera, and is visible.
-    WayPointParametersBase params(this);
-    params.frequency = 5000;
-    params.useCamera = true;
-    params.visible = false;
-    WOWayPointSpherical* wayPt = WOWP1::New(params, 3.f);
-    wayPt->setPosition(Vector(50.f, 0.f, 3.f));
-    worldLst->push_back(wayPt);
+void RacingModule::makeCheckpoints() {
+    std::vector<WO*> activators;
+    activators.push_back(this->car);
+    WayPointParametersBase params(this, activators, wpatREGULAR, 5000.f);
+    // make checkpoints
+    this->finishLine = Checkpoint::New(params, 15.f, 0);
+    this->checkpoint1 = Checkpoint::New(params, 15.f, 1);
+    this->checkpoint2 = Checkpoint::New(params, 15.f, 2);
+    this->checkpoint3 = Checkpoint::New(params, 15.f, 3);
+    // set their positions on the track
+    this->finishLine->setPosition(Vector(-43.4f, -65.6f, -21.f));
+    this->checkpoint1->setPosition(Vector(0.f, -215.f, -11.f));
+    this->checkpoint2->setPosition(Vector(-3.f, -11.f, -7.f));
+    this->checkpoint3->setPosition(Vector(22.6f, 184.4f, -9.f));
+    // add them to the world
+    worldLst->push_back(this->finishLine);
+    worldLst->push_back(this->checkpoint1);
+    worldLst->push_back(this->checkpoint2);
+    worldLst->push_back(this->checkpoint3);
 }
 
-int RacingModule::getIndex(WO* wo) {
-    return this->worldLst->getIndexOfWO(wo);
+void RacingModule::checkpointReached(int checkpoint) {
+    if (checkpoint == 0 && this->currentCheckpoint == 3) {
+        this->currentCheckpoint = 0;
+        ++this->lapNumber;
+        this->laps->setText("Lap " + std::to_string(this->lapNumber));
+    } else if (checkpoint == (this->currentCheckpoint + 1)) {
+        ++this->currentCheckpoint;
+    }
 }
+
+int RacingModule::getIndex(WO* wo) { return this->worldLst->getIndexOfWO(wo); }
 
 void RacingModule::processKeyPress(const SDL_Keycode& key) {
-    if (key == SDLK_f) this->toggleWarthog();
-    if (key == SDLK_o) ISoundManager::engine->play2D("../mm/sounds/oof.mp3");
-    if (key == SDLK_1 && this->progressBar != nullptr) this->progressBar->toggleEmpty();
-    if (key == SDLK_2 && this->progressBar != nullptr) this->progressBar->toggleFill();
-    if (key == SDLK_3 && this->isDriving()) { this->warthog->setModel(MGLFrustum::New(this->warthog, 1.f, 1.f, 1.f, 1.f)); }
+    //if (key == SDLK_f) this->toggleCar();
+    if (key == SDLK_r && this->isDriving()) this->car->setToCheckpoint(this->currentCheckpoint);
 }
 
-bool RacingModule::isDriving() { return this->warthog != nullptr && this->warthog->hasDriver(); }
+bool RacingModule::isDriving() { return this->car != nullptr && this->car->hasDriver(); }
 
 WO* RacingModule::getFromLabel(std::string label) {
     for (int i = 0; i < this->worldLst->size(); ++i) {

@@ -33,3 +33,6 @@
 #include "SDL_keyboard.h"
 #include "WorldContainer.h"
 
+#include "CameraChaseActorSmooth.h"
+#include "CameraChaseActorSmoothLockedOffsetGlobal.h"
+

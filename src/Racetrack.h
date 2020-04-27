@@ -13,7 +13,7 @@ namespace Aftr {
 			WOMacroDeclaration(Racetrack, WO);
 
 			static Racetrack* New(
-				const std::string& trackModel = "../mm/models/test/figure8.dae",
+				const std::string& trackModel = "../mm/models/courses/figure8/figure8.dae",
 				Vector scale = Vector(1.f, 1.f, 1.f),
 				MESH_SHADING_TYPE shadingType = MESH_SHADING_TYPE::mstAUTO
 			);

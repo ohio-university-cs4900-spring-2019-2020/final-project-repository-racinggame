@@ -47,12 +47,6 @@ void IPhysicsManager::drop() {
 }
 
 void IPhysicsManager::simulate(NetMessengerClient* client) {
-    //float time = (float) ManagerSDLTime::getTimeSinceLastPhysicsIteration();
-    //if (time < 20) {
-    //    scene->simulate(time / 1000.f);
-    //} else {
-    //    scene->simulate(16.5f / 1000.f);
-    //}
     scene->simulate(1.f / 60.f);
     scene->fetchResults(true);
 
@@ -64,6 +58,7 @@ void IPhysicsManager::simulate(NetMessengerClient* client) {
             wo->toPhysx(client);
         }
     }
+    
 }
 
 PxMaterial* IPhysicsManager::createMaterial(PxReal staticFriction, PxReal dynamicFriction, PxReal restitution) {
@@ -109,7 +104,7 @@ PxRigidDynamic* IPhysicsManager::createConvexMesh(WO* wo) {
     }
 
     // create actor and add it to scene
-    PxRigidDynamic* actor = PxCreateDynamic(*physics, PxTransform(PxVec3(0.f, 0.f, 0.f)), *shape, PxReal(2.f));
+    PxRigidDynamic* actor = PxCreateDynamic(*physics, PxTransform(), *shape, PxReal(2.f));
     scene->addActor(*actor);
     actor->userData = wo;
     return actor;
@@ -154,9 +149,8 @@ PxRigidStatic* IPhysicsManager::createTriangleMesh(WO* wo) {
     PxMaterial* gMaterial = createMaterial(0.5f, 0.5f, 0.6f);
     PxShape* shape = createShape(PxTriangleMeshGeometry(mesh), *gMaterial, true);
 
-    PxRigidStatic* actor = physics->createRigidStatic(PxTransform({0.f, 0.f, 0.f}));
-    bool b = actor->attachShape(*shape);
-
+    PxRigidStatic* actor = physics->createRigidStatic(PxTransform(0.f, 0.f, 0.f));
+    actor->attachShape(*shape);
     actor->userData = wo;
     addActor(actor);
     return actor;
@@ -168,7 +162,6 @@ PxVec3 IPhysicsManager::toPxVec3(Vector vec) {
 
 PxMat44 IPhysicsManager::mat4ToMat44(Mat4 mat) {
     PxMat44 matrix = PxMat44();
-
     matrix[0][0] = mat[0];  matrix[0][1] = mat[1];  matrix[0][2] = mat[2];  matrix[0][3] = mat[3];
     matrix[1][0] = mat[4];  matrix[1][1] = mat[5];  matrix[1][2] = mat[6];  matrix[1][3] = mat[7];
     matrix[2][0] = mat[8];  matrix[2][1] = mat[9];  matrix[2][2] = mat[10]; matrix[2][3] = mat[11];

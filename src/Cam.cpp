@@ -31,7 +31,7 @@ void Cam::onKeyUp(const SDL_KeyboardEvent& key) {
 }
 
 void Cam::update() {
-    this->location->setText(getLocString());
+    //this->location->setText(getLocString());
     for (SDL_Keycode key : this->keysPressed) {
         switch (key) {
             case SDLK_w:
